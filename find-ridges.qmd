@@ -1,0 +1,48 @@
+---
+title: "How to find ridges from a drainage direction map in GRASS GIS"
+author: "Huidae Cho"
+date: 2022-03-25
+date-modified: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-tools: true
+    code-copy: true
+    code-fold: false
+    html-math-method: katex
+    theme:
+      - cosmo
+categories: [bash, beginner]
+linkcolor: green
+urlcolor: green
+citecolor: green
+highlight-style: github
+# engine: knitr
+execute:
+  eval: false
+---
+Sometimes, we need to figure out where rain drops start flowing (i.e., ridges, hilltops, or headwaters with no contributing upstream cells) from a drainage direction map (`drain_dir`) only.
+
+```bash
+r.mapcalc expression='ridges=if(drain_dir[-1,-1]!=7 && drain_dir[-1,0]!=6 && drain_dir[-1,1]!=5 && drain_dir[0,1]!=4 &&'\
+' drain_dir[1,1]!=3 && drain_dir[1,0]!=2 && drain_dir[1,-1]!=1 && drain_dir[0,-1]!=8, 1, null())'
+```
+
+If we have a flow accumulation map (`flow_accum`) that was generated using a single flow direction algorithm, the following command will generate the same output because ridge cells always get assigned 1 (itself) as the number of contributing cells.
+
+```bash
+r.mapcalc expression='ridges=if(flow_accum==1, 1, null())'
+```
+
+However, when we use a multiple flow direction algorithm, there is no guarantee that ridge cells will get assign 1 because there can be partial flows from neighbor cells. In this case, the first method may be useful.
+
+Figure 1 shows ridge cells in yellow and sub-watershed polygons in the background.
+
+![ridges.png](images/ridges.png)  
+**Figure 1**: Identified ridges. The yellow cells represent ridges and the background polygons display sub-watersheds.
+
+Figure 2 clearly shows that these ridge cells do not have any contributing upstream cells.
+
+![ridges-closeup.png](images/ridges-closeup.png)  
+**Figure 2**: Close up. The red arrows show drain_dir directions.

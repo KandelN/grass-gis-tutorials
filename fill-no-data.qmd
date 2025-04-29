@@ -1,0 +1,95 @@
+---
+title: "How to fill no data cells in a raster map in GRASS GIS"
+author: "Huidae Cho"
+date: 2022-03-25
+date-modified: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-tools: true
+    code-copy: true
+    code-fold: false
+    html-math-method: katex
+    theme:
+      - cosmo
+categories: []
+linkcolor: green
+urlcolor: green
+citecolor: green
+highlight-style: github
+# engine: knitr
+execute:
+  eval: false
+---
+I need to fill onshore NULL (no data) cells in the DEM raster map shown below.
+![](images/dem1km-rast.png)
+
+The first step is to fill no data cells by interpolation.
+
+```bash
+g.region rast=dem1km
+r.fillnulls input=dem1km output=dem1km_nullfilled method=bilinear
+```
+
+However, [r.fillnulls](https://grass.osgeo.org/grass-stable/manuals/r.fillnulls.html) fills not only small islands of NULL cells, but also any NULL cells outside the valid raster boundaries. The output from [r.fillnulls](https://grass.osgeo.org/grass-stable/manuals/r.fillnulls.html) will be rectangular regardless of the original shape of the input raster map.
+
+![](images/dem1km_nullfilled-rast.png)
+
+I need to create a mask that only covers the original data extent, but it should also include no data areas. First, create a mask using the original DEM raster map.
+
+```bash
+r.mapcalc expression='dem1km_mask=if(!isnull(dem1km),1,null())'
+```
+
+![](images/dem1km_mask-rast.png)
+
+Convert this raster mask to vector.
+
+```bash
+r.to.vect input=dem1km_mask output=dem1km_mask type=area
+```
+
+![](images/dem1km_mask-vect.png)
+
+There are island areas where no data cells are. These areas are not assigned a centroid, so let’s assign a centroid to them.
+
+```bash
+v.centroids input=dem1km_mask output=dem1km_mask_nullfilled
+```
+
+![](images/dem1km_mask_nullfilled-vect.png)
+
+Create a new column “dissolve” and assign the same value of 1 to this column for all areas. Then, dissolve all areas by this column.
+
+```bash
+v.db.addcolumn map=dem1km_mask_nullfilled column='dissolve int'
+v.db.update map=dem1km_mask_nullfilled column=dissolve value=1
+v.dissolve input=dem1km_mask_nullfilled output=dem1km_mask_dissolved column=dissolve
+```
+
+![](images/dem1km_mask_dissolved-vect.png)
+
+Convert the dissolved vector to raster.
+
+```bash
+v.to.rast input=dem1km_mask_dissolved output=dem1km_mask_dissolved use=val
+```
+
+The above steps failed once for me, but that’s OK. We can directly convert the undissolved vector mask to raster. This method can even be better and faster if we don’t need a dissolved vector mask.
+
+```bash
+v.to.rast input=dem1km_mask_nullfilled output=dem1km_mask_dissolved use=value
+# optionally, you can create a vector mask if you need one
+r.to.vect input=dem1km_mask_dissolved out=dem1km_mask_dissolved type=area
+```
+
+![](images/dem1km_mask_dissolved-rast.png)
+
+Extract the filled DEM by the final mask.
+
+```bash
+r.mapcalc expression='dem1km_clean=if(!isnull(dem1km_mask_dissolved),dem1km_nullfilled,null())'
+```
+
+![](images/dem1km_clean-rast.png)

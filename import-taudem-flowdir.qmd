@@ -1,0 +1,45 @@
+---
+title: "How to import TauDEM D8 direction into GRASS GIS"
+author: "Huidae Cho"
+date: 2022-03-25
+date-modified: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-tools: true
+    code-copy: true
+    code-fold: false
+    html-math-method: katex
+    theme:
+      - cosmo
+categories: [bash, beginner]
+linkcolor: green
+urlcolor: green
+citecolor: green
+highlight-style: github
+# engine: knitr
+execute:
+  eval: false
+---
+TauDEM D8 direction (`d8`) uses the following encoding:
+
+![taudem-fdr](images/taudem-fdr.svg)  
+**Figure 1**: TauDEM D8 encoding
+
+This is GRASS GIS drainage (`drain`) encoding:
+
+![grass-fdr](images/grass-fdr.svg)  
+**Figure 2**: GRASS GIS drainage encoding
+
+```bash
+# import D8
+r.in.gdal input=d8.tif output=d8
+
+# convert D8 to drain
+r.mapcalc ex="drain=if(d8-1,d8-1,8)"
+
+# convert drain back to D8
+# use abs() for possibly negative directions from outside the DEM
+r.mapcalc ex="d82=1+abs(drain)%8"
+```

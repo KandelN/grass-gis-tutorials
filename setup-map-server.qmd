@@ -1,0 +1,294 @@
+---
+title: "Setting up MapServer with GRASS GIS Support"
+author: "Huidae Cho"
+date: 2022-03-25
+date-modified: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-tools: true
+    code-copy: true
+    code-fold: false
+    html-math-method: katex
+    theme:
+      - cosmo
+categories: [bash, beginner]
+linkcolor: green
+urlcolor: green
+citecolor: green
+highlight-style: github
+# engine: knitr
+execute:
+  eval: false
+---
+While setting up a MapServer site with GRASS GIS support, I found that there is very little information about this topic. [GRASS and MapServer](https://grasswiki.osgeo.org/wiki/GRASS_and_MapServer) gave me a basic idea on how to write a mapfile, but that was not enough because I had to spend a whole night without sleep to figure out why things were not working the way they are supposed to be. If something is not documented well or a user cannot find good enough information online, at least, that should be easy, right? Well, now it’s easy for me because I know a little bit more than last night. Here I’d like to share with you what I have found.
+
+My server environment is as follows:
+
+- **Slackware 14.0**
+- **Apache 2.4.3**
+- **MapServer 6.4.1**
+- **GRASS GIS 7.0 SVN**
+- **GDAL SVN** (compiled against GRASS GIS 7 as of 4/24/2014)
+
+# 1. Installing GRASS
+The first thing you need to do is of course to compile and install GRASS GIS. Since you’ll need GRASS support in GDAL later and that means a circular dependency, you first have to install GDAL without GRASS support to be able to compile GRASS with GDAL capabilities. Just FYI, here is my configure command for GRASS:
+
+```bash
+CFLAGS="-g -O2 -Wall" \
+CXXFLAGS="-g -O2 -Wall" \
+LDFLAGS="-lcurses" \
+./configure \
+  --with-nls \
+  --with-cxx \
+  --with-postgres \
+  --with-sqlite \
+  --with-motif \
+  --with-freetype \
+  --with-readline \
+  --with-python \
+  --with-wxwidgets \
+  --with-proj-share=/usr/share/proj \
+  > configure.log
+```
+
+Options can vary depending on your environment and needs, so change them as needed.
+
+# 2. Rebuilding GDAL with GRASS Support
+Now you have GRASS shared libraries and can rebuild GDAL for reading/writing GRASS data from MapServer. The latest stable version of GDAL is 1.10.1 as of 4/24/2014, but its configure doesn’t support GRASS 7 yet. The SVN version has added a grass70+ setting for linking against GRASS 7 libraries, but it’s missing two libraries: grass_ccmath and grass_btree2. I’ve patched configure with [this file](https://idea.isnew.info/how-to-set-up-mapserver-with-grass-gis-support/gdal-configure.patch). Patch configure with `patch -p0 < configure.patch` or you can also download [the patched configure](https://idea.isnew.info/how-to-set-up-mapserver-with-grass-gis-support/gdal-configure). Again, FYI, my configure command for GDAL is as follows:
+
+```bash
+./configure \
+  --prefix=/usr \
+  --libdir=/usr/lib \
+  --sysconfdir=/etc \
+  --localstatedir=/var \
+  --mandir=/usr/man \
+  --enable-static=no \
+  --with-threads \
+  --with-geos=yes \
+  --with-ogr=yes \
+  --with-libz=/usr/lib \
+  --with-liblzma \
+  --with-jpeg=internal \
+  --with-libtiff=internal \
+  --with-curl=/usr/bin/curl-config \
+  --without-grib \
+  --with-static-proj4 \
+  --with-mysql \
+  --with-python \
+  --with-poppler \
+  --with-grass=path/to/grass_libs \
+  > configure.log
+```
+Because of the recent drastic changes in GRASS API from version 6 to 7, I found that GDAL’s GRASS 7 support is not without any issues. I found some issues in reading GRASS raster data. In GRASS, there are two types of data extents: map and computational regions. Map regions don’t change while the computational region can change as the user adjusts it for analyzing a specific region in a GRASS session. I believe that GDAL should read only map regions because applications outside GRASS sessions cannot depend on the final computational region where the user happens to leave after his/her analysis. The GDAL SVN version is mixing the two regions, which can cause an empty or noisy output. I have fixed this issue by patching frmts/grass/grass57dataset.cpp file with [this file](https://idea.isnew.info/how-to-set-up-mapserver-with-grass-gis-support/gdal-frmts-grass-grass57dataset.cpp.patch). Patch frmts/grass/grass57dataset.cpp with `patch -p0 < gdal-frmts-grass-grass57dataset.cpp.patch` or you can download [the patched file](https://idea.isnew.info/how-to-set-up-mapserver-with-grass-gis-support/gdal-frmts-grass-grass57dataset.cpp), so overwrite frmts/grass/grass57dataset.cpp with this file before building GDAL.
+
+Now you have GDAL with GRASS support and you don’t need to recompile GRASS because these libraries are shared libraries.
+
+# 3. Installing MapServer
+MapServer cannot handle NoData cells in floating-point rasters correctly and returns an empty image if you try to map a data range to a color range using DATARANGE and COLORRANGE. Also, it does not scale the color table when scaling cell values. I’ve fixed [the NoData issue](https://github.com/mapserver/mapserver/issues/4918) and [the color scaling issue](https://github.com/mapserver/mapserver/issues/4918) with [this patch](https://idea.isnew.info/how-to-set-up-mapserver-with-grass-gis-support/mapserver-mapdrawgdal.c.patch). Patch `mapdrawgdal.c` with `patch -p0 < mapdrawgdal.c.patch` or download [the patched file](https://idea.isnew.info/how-to-set-up-mapserver-with-grass-gis-support/mapserver-mapdrawgdal.c). Then compile and install MapServer:
+
+```bash
+mkdir build
+cd build
+cmake .. > configure.log
+make
+make install
+```
+
+# 4. Configuring Apache
+OK, you installed everything you need and it’s time to configure the web server. The first thing I noticed is that MapServer is not your friend if you like mod_suexec. In some cases, MapServer wants to create temporary image files on the server physically, but it doesn’t set these files’ permissions so that other users than the creator can read them. If you’re using mod_suexec, MapServer will create temporary files whose owner is you and whose permissions are 600 or readable/writable by you, but no permissions for the Apache user. What it means is that the web client can create image files on your server, but it cannot read them because the web server cannot access them. I tried to trace down to the bottom of the MapServer code to change file permissions, but I changed my mind and thought that maybe it’s time to get rid of mod_suexec for security reasons.
+
+By moving towards no mod_suexec, I gained better security, but lost some good stuff too. For example, MapServer cannot access GRASS vector attribute tables stored in PostgreSQL databases under my role. I created a new role just for Apache in psql as a superuser:
+```bash
+create user apache;
+```
+Then I granted a select privilege to apache on vector maps:
+
+```bash
+grant select on vector_name to apache;
+```
+Please remember that I’m not a database expert and simply creating a new role for Apache may become a security hole.
+
+Now make sure to load the mod_cgi module in `httpd.conf` to run the MapServer CGI:
+
+```bash
+LoadModule cgi_module lib/httpd/modules/mod_cgi.so
+```
+
+# 5. Creating mapserv.cgi
+You may simply link /path/to/bin/mapserv to /path/to/www/mapserv.cgi with ln -sf /path/to/bin/mapserv /path/to/www/mapserv.cgi, but, if you use the pg DB driver in GRASS, you have to set a HOME environment variable because the Apache user doesn’t have a home directory and the pg driver requires one. Instead of linking from mapserv, create a new CGI file where you need it:
+
+```bash
+#!/bin/sh
+HOME=/home/you /path/to/bin/mapserv
+```
+
+Since I have write permissions to the GRASS SVN repository, I usually rebuild GRASS whenever I get new updates and don’t actually install the shared libraries. For this reason, I also need to set LD_LIBRARY_PATH in mapserv.cgi:
+
+```bash
+#!/bin/sh
+HOME=/home/you LD_LIBRARY_PATH=/path/to/grass_source/dist.x86_64-unknown-linux-gnu/lib /path/to/bin/mapserv
+```
+And
+```bash
+chmod a+x mapserv.cgi
+```
+
+# 6. Creating and Testing Mapfiles
+I like to see bare minimum examples when I start learning something. For displaying a raster map, you need to create a mapfile on your server:
+
+```bash
+MAP
+  SIZE 600 600
+  EXTENT -289125.000 769365.000 15.000 1442985.000
+  LAYER
+    TYPE RASTER
+    STATUS DEFAULT
+    DATA "/home/you/grass_data/location/PERMANENT/cellhd/elev"
+    CLASS
+      STYLE
+        DATARANGE 70 423
+        COLORRANGE 0 0 0 255 255 255
+      END
+    END
+  END
+END
+```
+
+The layer’s status should be DEFAULT, not ON. If it’s ON, the map is not displayed. Another mapfile for a line map follows:
+
+```bash
+MAP
+  SIZE 600 600
+  EXTENT -289125.000 769365.000 15.000 1442985.000
+  LAYER
+    TYPE LINE
+    STATUS DEFAULT
+    CONNECTIONTYPE OGR
+    CONNECTION "/home/you/grass_data/location/PERMANENT/vector/streams/head"
+    CLASS
+      COLOR 255 0 0
+    END
+  END
+END
+```
+Putting the above two map files together to display the line map on top of the raster map, we have the following:
+```bash
+MAP
+  SIZE 600 600
+  EXTENT -289125.000 769365.000 15.000 1442985.000
+# For debugging only
+#  CONFIG "MS_ERRORFILE" "/var/log/mapserv.log"
+#  DEBUG 5
+  LAYER
+    TYPE RASTER
+    STATUS DEFAULT
+    DATA "/home/you/grass_data/location/PERMANENT/cellhd/elev"
+    CLASS # you may not need a class if your cell values are between 0 and 255.
+      STYLE
+        DATARANGE 70 423 # min to max cell values
+        COLORRANGE 0 0 0 255 255 255 # black to white
+      END
+    END
+  END
+  LAYER
+    TYPE LINE
+    STATUS DEFAULT
+    CONNECTIONTYPE OGR
+    CONNECTION "/home/you/grass_data/location/PERMANENT/vector/streams/head"
+    CLASS
+      COLOR 255 0 0
+    END
+  END
+END
+```
+
+Keep in mind that the order of drawing layers will be top to bottom, so place raster maps at the top and vector maps at the bottom.
+
+Now you have mapfiles, but how can you see the maps on your browser? <http://your.domain/path/to/mapserv.cgi??map=path/to/line_on_raster.map&mode=map> is your URL to the maps. Remember that path/to/line_on_raster.map can be either the relative path from mapserv.cgi or the absolute file system path, not the URL path to the mapfile.
+
+If you see something other than a white image at this point, you’re lucky. You’re not done yet because the Apache user cannot start a GRASS session to read your maps. In your mapset directory (/home/you/grass_data/location/PERMANENT in the above examples), you’ll see a .tmp directory. Inside that directory, there is one more directory whose name is the same as your system name. New GRASS sessions store a lock file there, so the Apache user has to have write permissions in this directory:
+
+```bash
+chmod o+rx /home/you/grass_data/location/PERMANENT/.tmp
+chmod o+rwx /home/you/grass_data/location/PERMANENT/.tmp/your_system_name
+```
+
+Now try the above URL again and you should see the beautiful maps.
+
+# 7. Adding Multiple Raster Layers
+You may want to add multiple raster layers in a mapfile like the following:
+```bash
+MAP
+  SIZE 600 600
+  EXTENT -289125.000 769365.000 15.000 1442985.000
+# For debugging only
+#  CONFIG "MS_ERRORFILE" "/var/log/mapserv.log"
+#  DEBUG 5
+  LAYER
+    NAME "elev"
+    TYPE RASTER
+    STATUS DEFAULT
+    DATA "/home/you/grass_data/location/PERMANENT/cellhd/elev"
+    CLASS # you may not need a class if your cell values are between 0 and 255.
+      STYLE
+        DATARANGE 70 423 # min to max cell values
+        COLORRANGE 0 0 0 255 255 255 # black to white
+      END
+    END
+  END
+  LAYER
+    NAME "fdir"
+    TYPE RASTER
+    STATUS DEFAULT
+    DATA "/home/you/grass_data/location/PERMANENT/cellhd/fdir"
+    CLASS # you may not need a class if your cell values are between 0 and 255.
+      STYLE
+        DATARANGE -256 360 # min to max cell values
+        COLORRANGE 255 0 0 0 0 255 # red to blue
+      END
+    END
+  END
+END
+```
+I tried the same thing, but it didn’t work. Well, one more night just passed by and I found the reason and a solution. The reason why the above mapfile doesn’t work is that MapServer keeps connections to the layers after drawing them by default for single data files. It internally changes the map extent from one side to the other side for creating the output image, but GRASS 7 doesn’t like the idea of changing the extent while layers are open for reading and writing and throws a fatal error. The PROCESSING directive is your friend:
+```bash
+MAP
+  SIZE 600 600
+  EXTENT -289125.000 769365.000 15.000 1442985.000
+# For debugging only
+#  CONFIG "MS_ERRORFILE" "/var/log/mapserv.log"
+#  DEBUG 5
+  LAYER
+    NAME "elev"
+    TYPE RASTER
+    STATUS DEFAULT
+    PROCESSING "CLOSE_CONNECTION=CLOSE"
+    DATA "/home/you/grass_data/location/PERMANENT/cellhd/elev"
+    CLASS # you may not need a class if your cell values are between 0 and 255.
+      STYLE
+        DATARANGE 70 423 # min to max cell values
+        COLORRANGE 0 0 0 255 255 255 # black to white
+      END
+    END
+  END
+  LAYER
+    NAME "fdir"
+    TYPE RASTER
+    STATUS DEFAULT
+    PROCESSING "CLOSE_CONNECTION=CLOSE"
+    DATA "/home/you/grass_data/location/PERMANENT/cellhd/fdir"
+    CLASS # you may not need a class if your cell values are between 0 and 255.
+      STYLE
+        DATARANGE -256 360 # min to max cell values
+        COLORRANGE 255 0 0 0 0 255 # red to blue
+      END
+    END
+  END
+END
+```
+
+# 8. Conclusions
+I discussed how you can set up a MapServer site for displaying GRASS maps. Even if the hints and fixes I put on this page look very trivial and simple, it won’t be easy to know why things are not working as expected without spending hours of serious research and tracing the code line by line. I hope this article helps those who plan to serve GRASS maps with MapServer. If you have any questions, please [let me know](https://idea.isnew.info/comments.html).

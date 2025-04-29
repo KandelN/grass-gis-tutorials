@@ -1,0 +1,68 @@
+---
+title: "How to import ArcGIS flow direction into GRASS GIS"
+author: "Huidae Cho"
+date: 2022-03-25
+date-modified: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-tools: true
+    code-copy: true
+    code-fold: false
+    html-math-method: katex
+    theme:
+      - cosmo
+categories: [bash, beginner]
+linkcolor: green
+urlcolor: green
+citecolor: green
+highlight-style: github
+# engine: knitr
+execute:
+  eval: false
+---
+As shown in Figure 1, ArcGIS uses powers of two to represent the flow direction starting with 2⁰ from East in the clockwise direction. Figure 2 shows how the [`r.watershed`](https://grass.osgeo.org/grass-stable/manuals/r.watershed.html) module in GRASS GIS encodes similar information in a raster map. This module measures the aspect of each cell in the counter-clockwise direction from East and divides the aspect angle by 45 so that East becomes 8, which is 8×45°=360°. East is not 0 because this module uses 0 to indicate depression areas.
+
+::: columns
+:::: {.column withd="50%"}
+![arcgis-fdr](images/arcgis-fdr.svg)
+**Figure 1**: ArcGIS flow direction encoding
+::::
+:::: {.column withd="50%"}
+![grass-fdr](images/grass-fdr.svg)  
+**Figure 2**: GRASS GIS drainage encoding
+::::
+:::
+
+Using this information, you can import the flow direction raster from ArcGIS into GRASS GIS and convert it to the drainage raster.
+
+1. In ArcGIS, right click on the flow direction layer (fdr) → Data → Export Data  
+2. Export fdr as GeoTiff (TIFF format). Output filename `fdr.tif` in this example.
+3. In GRASS GIS, import `fdr.tif` first:
+  ```bash
+  r.in.gdal input=fdr.tif output=fdr
+  ```
+4. Convert fdr to drain:
+
+  ```bash
+  r.mapcalc expression="drain=int(8-log(fdr,2))"
+  ```
+
+Now, converting drain back to fdr should be straightfoward:
+
+```bash
+r.mapcalc expression="fdr2=2^(8-drain)"
+```
+
+However, this conversion is only for those drain rasters that were converted from ArcGIS flow direction maps (positive cells only). Since [`r.watershed`](https://grass.osgeo.org/grass-stable/manuals/r.watershed.html) uses negative integers to flag cells that receive flows from outside the computational extent by default, the above expression would have to be rewritten as follows if you want to handle both ArcGIS-derived drain and [`r.watershed`](https://grass.osgeo.org/grass-stable/manuals/r.watershed.html) generated drain rasters:
+
+```bash
+r.mapcalc expression="fdr2=2^(8-abs(drain))"
+```
+
+You can export `fdr2` to `fdr2.tif` using [`r.out.gdal`](https://grass.osgeo.org/grass-stable/manuals/r.out.gdal.html):
+
+```bash
+r.out.gdal input=fdr2 output=fdr2.tif
+```

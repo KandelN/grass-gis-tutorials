@@ -1,0 +1,83 @@
+---
+title: "How to know the map type of a GRASS GIS archive file"
+author: "Huidae Cho"
+date: 2022-03-25
+date-modified: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-tools: true
+    code-copy: true
+    code-fold: false
+    html-math-method: katex
+    theme:
+      - cosmo
+categories: [bash, beginner]
+linkcolor: green
+urlcolor: green
+citecolor: green
+highlight-style: github
+# engine: knitr
+execute:
+  eval: false
+---
+GRASS GIS provides the [`r.pack`](https://grass.osgeo.org/grass-stable/manuals/r.pack.html) and [`v.pack`](https://grass.osgeo.org/grass-stable/manuals/v.pack.html) modules that we can use to export raster and vector maps, respectively, to archive files in the .pack extension. However, unless we specify the map type explicitly in the output parameter, there is no way to know which type an archive file is for without trying [`r.pack`](https://grass.osgeo.org/grass-stable/manuals/r.pack.html) or [`v.pack`](https://grass.osgeo.org/grass-stable/manuals/v.pack.html) first. These modules will tell us which type the archive file is for. What if we don’t have access to GRASS GIS for whatever reason?
+
+Pack files are actually `.tar.gz` files, so we can use `tar` to look into the list of contents in a pack file without uncompressing it.
+
+```bash
+> tar -tf map.pack # I know it's a map, but is it raster or vector?
+map/cidx
+map/coor
+map/dbln
+map/head
+map/hist
+map/sidx
+map/topo
+db.sqlite
+PROJ_INFO
+PROJ_UNITS
+PROJ_EPSG
+```
+
+The above pack file is a vector map because there is `db.sqlite`, but checking for `db.sqlite` only works when a map is linked to a database. We could use `map/dbln` because this metadata file always exists, but we have to pass the map name + `/dbln` to `tar` like this:
+
+```bash
+> tar -tf map.pack map/dbln # exit code 0 if vector, exit code 2 if raster
+```
+
+Let’s take a look at a raster pack file.
+
+```bash
+> tar -tf map.pack
+map/PROJ_EPSG
+map/PROJ_INFO
+map/PROJ_UNITS
+map/cats
+map/cell
+map/cell_misc/
+map/cell_misc/nullcmpr
+map/cell_misc/range
+map/cell_misc/stats
+map/cellhd
+map/colr
+map/hist
+```
+
+Unlike the contents of vector pack files, those of raster pack files are all contained inside a root directory. We can use this fact to simplify our check.
+
+```bash
+> tar -tf map.pack PROJ_INFO > /dev/null 2>&1 # keep it quiet
+> echo $? # exit code 0 if vector, exit code 2 if raster
+```
+
+In a shell script,
+
+```bash
+if tar -tf map.pack PROJ_INFO > /dev/null 2>&1; then
+    echo vector
+else
+    echo raster
+fi
+```

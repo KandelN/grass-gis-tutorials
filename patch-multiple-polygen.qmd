@@ -1,0 +1,53 @@
+---
+title: "How to patch multiple polygon vector maps cleanly in GRASS GIS"
+author: "Huidae Cho"
+date: 2022-03-25
+date-modified: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-tools: true
+    code-copy: true
+    code-fold: false
+    html-math-method: katex
+    theme:
+      - cosmo
+categories: [bash, beginner]
+linkcolor: green
+urlcolor: green
+citecolor: green
+highlight-style: github
+# engine: knitr
+execute:
+  eval: false
+---
+The [`v.patch`](https://grass.osgeo.org/grass-stable/manuals/v.patch.html) module does an excellent job patching multiple polygon vector maps, but it sometimes leaves areas without centroids. Here, I’m sharing what I do to clean the topology of [`v.patch`](https://grass.osgeo.org/grass-stable/manuals/v.patch.html) outputs. Let’s say I want to patch 5 subbasin polygon vector maps from `subbasin1,...,subbasin5`. I start patching them into one vector map.
+
+```bash
+v.patch input=subbasin1,subbasin2,subbasin3,subbasin4,subbasin5 output=subbasins
+```
+
+If I’m lucky, [`v.info`](https://grass.osgeo.org/grass-stable/manuals/v.info.html) should report the same number of areas and centroids. If it’s not the case, you need to clean the output vector map. First, break boundaries at intersections, remove duplicate features, small angles, and duplicate area centroids.
+
+```bash
+v.clean input=subbasins output=tmp tool=break,rmdupl,rmsa,rmdac
+```
+
+Add missing categories to areas. After running this command, there should be the same number of areas and centroids.
+
+```bash
+v.category input=tmp output=tmp2 option=add type=area
+```
+
+However, at this point, there are duplicate categories, so recategorize all centroids. Remove existing categories first.
+
+```bash
+v.category input=tmp2 output=tmp3 option=del cat=-1
+```
+
+Restart from 1 and save the output as the final vector map.
+
+```bash
+v.category input=tmp3 output=subbasins option=add
+```

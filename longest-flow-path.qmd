@@ -1,0 +1,124 @@
+---
+title: "Calculate the Longest Flow Path in GRASS GIS"
+author: "Huidae Cho"
+date: 2022-03-25
+date-modified: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-tools: true
+    code-copy: true
+    code-fold: false
+    html-math-method: katex
+    theme:
+      - cosmo
+categories: [bash, beginner]
+linkcolor: green
+urlcolor: green
+citecolor: green
+highlight-style: github
+# engine: knitr
+execute:
+  eval: false
+---
+
+
+# 1. [`r.accumulate`](https://grass.osgeo.org/grass-stable/manuals/addons/r.accumulate.html) addon
+The [`r.accumulate`](https://grass.osgeo.org/grass-stable/manuals/addons/r.accumulate.html) module implements recursive and iterative algorithms for calculating the longest flow path based on Cho (2020). This module outperforms Arc Hydro’s Longest Flow Path tool.
+
+
+![](images/fig-ga-ssd-elapsed-vs-subarea-archydropro.png)
+
+
+# 2. Deprecated Raster Approach
+The [r.stream.distance](https://grass.osgeo.org/grass-stable/manuals/addons/r.stream.distance.html) module can calculate the flow length downstream (FLDS) and flow length upstream (FLUS) raster maps. In the FLDS map, each cell has the flow length from that cell to the downstream-most outlet cell flowing outside the watershed. Outlet cells along the watershed boundary get assigned 0. Similarly, in the FLUS map, each cell has the flow length from that cell to the upstream-most cell where the watershed divide starts. Those cells along the watershed divide get assigned 0. These two raster maps have the same maximum value at the outlet cell in FLUS and the upstream-most cell on the longest flow path (LFP) in FLDS. If we add both maps, cells on the output map will have the same maximum value greater than non-LFP cells and we use that fact to calculate LFP.
+
+This tutorial uses the [North Carolina sample data set](https://grass.osgeo.org/download/data/).
+
+
+## 2.1 Calculate the Longest Flow Path Raster Map
+First, create the drainage direction map (`drain_directions`) from the elevation map (`elevation`).
+
+```bash
+g.region rast=elevation
+r.watershed elevation=elevation drainage=drain_directions
+```
+Create the basin map (`basin`) at x=642455 and y=222614 and apply it as mask.
+
+```bash
+r.water.outlet input=drain_directions output=basin coordinates=642455,222614
+g.region rast=basin
+r.mask raster=basin
+```
+Create a raster map (`outlet`) containing the outlet point.
+```bash
+echo 642455,222614 | v.in.ascii input=- output=outlet separator=,
+v.to.rast input=outlet output=outlet use=cat
+```
+Calculate FLDS (`flds`) and FLUS (`flus`).
+```bash
+r.stream.distance -o stream_rast=outlet direction=drain_directions method=downstream distance=flds
+r.stream.distance -o stream_rast=outlet direction=drain_directions method=upstream distance=flus
+```
+Combine FLDS and FLUS to create a new raster map (`fldsus`).
+```bash
+r.mapcalc expression="fldsus=flds+flus"
+```
+Find the maximum flow length that each cell on FLDSUS got assigned.
+```bash
+r.info -r map=fldsus | sed '/^max=/!d; s/^max=//'
+```
+Create the LFP raster map (lfp) allowing small floating-point errors in FLDSUS. The maximum cell value obtained from the last step (or LFP distance) was 21452.825. Subtract a small number to avoid a potential floating-point error.
+```bash
+r.mapcalc expression="lfp=if(fldsus>=21452.825-0.0005,1,null())"
+```
+
+The `lfp` map is the longest flow path raster map.
+
+## 2.2 Calculate the Longest Flow Path Vector Map
+
+Simply converting the lfp raster map to vector won’t produce the correct vector map because of [this issue](https://idea.isnew.info/how-to-delineate-stream-networks-in-grass-gis.html#-how-not-to-delineate-stream-networks). To properly trace the longest flow path in vector format, we need to find the headwater raster cells and start tracing flow directions from there. Using the maximum flow length found above (21452.825), find the headwater cells from FLDS and create a new vector map with the headwater points.
+
+```bash
+r.mapcalc expression="heads=if(flds>=21452.825-0.0005,1,null())"
+r.to.vect input=heads output=heads type=point
+```
+Trace flow directions from the headwater points to calculate the longest flow path in vector format.
+```bash
+r.path input=drain_directions vector_path=path start_points=heads
+```
+The output vector map (path) includes the longest flow path, but it passes through the outlet and flows beyond the watershed. We need to split the path at the outlet first and select only the upstream segment within the watershed. To split the path at the outlet, create a new vector map with the snapped outlet point.
+
+```bash
+r.to.vect input=outlet output=outlet type=point
+```
+Find the coordinates of the snapped outlet. Read snapped x=642455 and y=222615 and split the path at this point.
+
+```bash
+v.to.db -p map=outlet option=coor
+v.edit map=path tool=break coords=642455,222615
+```
+Select the upstream segment only that touches the headwater points.
+
+```bash
+v.select ainput=path binput=heads output=lfp
+```
+Finally, we got the longest flow path in `lfp`.
+
+![](images/r_lfp_nc_example_single.png)
+
+This example produces two lines with the same flow length.
+
+![](images/r_lfp_nc_example_single_warning.png)
+
+## 2.3 [`r.lfp`](https://grass.osgeo.org/grass72/manuals/addons/r.lfp.html) Addon
+The procedure above has been implemented as a GRASS addon module [`r.lfp`](https://grass.osgeo.org/grass72/manuals/addons/r.lfp.html).
+
+```bash
+g.extension extension=r.lfp
+r.lfp input=elevation output=lfp coordinates=642455,222614
+```
+
+# 3. References
+- Cho, H. (2020). A Recursive Algorithm for Calculating the Longest Flow Path and Its Iterative Implementation. *Environmental Modelling & Software*, 131, 104774. doi:10.1016/j.envsoft.2020.104774

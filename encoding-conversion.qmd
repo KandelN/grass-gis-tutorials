@@ -1,0 +1,263 @@
+---
+title: "Flow Direction Encoding Conversion in GRASS GIS"
+author: "Huidae Cho"
+date: 2022-03-25
+date-modified: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-tools: true
+    code-copy: true
+    code-fold: false
+    html-math-method: katex
+    theme:
+      - cosmo
+categories: [bash, beginner]
+linkcolor: green
+urlcolor: green
+citecolor: green
+highlight-style: github
+# engine: knitr
+execute:
+  eval: false
+---
+# Introduction
+
+This document shows how to convert flow direction encodings between several formats in GRASS GIS. Each section displays:
+
+- **Figure Left:** Input encoding
+- **Equation:** Conversion formula
+- **Figure Right:** Output encoding
+- **GRASS GIS Command**
+
+---
+
+## 1. Degree to 45degree
+
+::: columns
+:::: {.column width="20%"}
+![](images/degree.svg){width=80%}
+::::
+
+:::: {.column width="60%"}
+$$D = \frac{d}{45}$$  
+::::
+
+::::  {.column width="20%"}
+![](images/45degree.svg){width=80%}
+::::
+:::
+```bash
+r.mapcalc "45degree = int(degree / 45)"
+```
+
+## 2. 45degree to Degree
+
+::: columns
+:::: {.column width="20%"}
+![](images/45degree.svg){width=80%}
+::::
+
+:::: {.column width="60%"}
+$$d = 45 \times |D|$$  
+::::
+
+:::: {.column width="20%"}
+![](images/degree.svg){width=80%}
+::::
+:::
+```bash
+r.mapcalc "degree = abs(45degree) * 45"
+```
+
+## 3. Degree to Power2
+
+::: columns
+:::: {.column width="20%"}
+![](images/degree.svg){width=80%}
+::::
+
+:::: {.column width="60%"}
+$$p = 2^{8 - \frac{d}{45}}$$  
+::::
+
+:::: {.column width="20%"}
+![](images/power2.svg){width=80%}
+::::
+:::
+```bash
+r.mapcalc "power2 = 2^(8 - degree / 45)"
+```
+---
+
+## 4. Power2 to Degree
+
+::: columns
+:::: {.column width="20%"}
+![](images/power2.svg){width=80%}
+::::
+
+:::: {.column width="60%"}
+$$d = 45 \times (8 - \log_2 p)$$  
+::::
+
+:::: {.column width="20%"}
+![](images/degree.svg){width=80%}
+::::
+:::
+```bash
+r.mapcalc "degree = 45 * int(8 - log(power2, 2))"
+```
+
+## 5. Degree to TauDEM
+
+::: columns
+:::: {.column width="20%"}
+![](images/degree.svg){width=80%}
+::::
+
+:::: {.column width="60%"}
+$$t = 1 + \left( \frac{d}{45} \mod 8 \right)$$  
+::::
+
+:::: {.column width="20%"}
+![](images/taudem.svg){width=80%}
+::::
+:::
+```bash
+r.mapcalc "taudem = 1 + (degree / 45) % 8"
+```
+
+## 6. TauDEM to Degree
+
+::: columns
+:::: {.column width="20%"}
+![](images/taudem.svg){width=80%}
+::::
+
+:::: {.column width="60%"}
+$$d = 45 \times \left\{ \begin{array}{ll} t-1 & \text{if } t-1 > 0 \\ 8 & \text{otherwise} \end{array} \right.$$  
+::::
+
+:::: {.column width="20%"}
+![](images/degree.svg){width=80%}
+::::
+:::
+```bash
+r.mapcalc "degree = 45 * if(taudem - 1, taudem - 1, 8)"
+```
+
+## 7. 45degree to Power2
+
+::: columns
+:::: {.column width="20%"}
+![](images/45degree.svg){width=80%}
+::::
+
+:::: {.column width="60%"}
+$$p = 2^{8 - |D|}$$  
+::::
+
+:::: {.column width="20%"}
+![](images/power2.svg){width=80%}
+::::
+:::
+```bash
+r.mapcalc "power2 = 2^(8 - abs(45degree))"
+```
+
+## 8. Power2 to 45degree
+
+::: columns
+:::: {.column width="20%"}
+![](images/power2.svg){width=80%}
+::::
+
+:::: {.column width="60%"}
+$$D = 8 - \log_2 p$$  
+::::
+
+:::: {.column width="20%"}
+![](images/45degree.svg){width=80%}
+::::
+:::
+```bash
+r.mapcalc "45degree = int(8 - log(power2, 2))"
+```
+
+## 9. 45degree to TauDEM
+
+::: columns
+:::: {.column width="20%"}
+![](images/45degree.svg){width=80%}
+::::
+
+:::: {.column width="60%"}
+$$t = 1 + (|D| \mod 8)$$  
+::::
+
+:::: {.column width="20%"}
+![](images/taudem.svg){width=80%}
+::::
+:::
+```bash
+r.mapcalc "taudem = 1 + abs(45degree) % 8"
+```
+
+## 10. TauDEM to 45degree
+
+::: columns
+:::: {.column width="20%"}
+![](images/taudem.svg){width=80%}
+::::
+
+:::: {.column width="60%"}
+$$D = \left\{\begin{array}{ll} t-1 & \text{if } t-1 > 0 \\ 8 & \text{otherwise} \end{array} \right.$$  
+::::
+
+:::: {.column width="20%"}
+![](images/45degree.svg){width=80%}
+::::
+:::
+```bash
+r.mapcalc "45degree = if(taudem - 1, taudem - 1, 8)"
+```
+
+## 11. Power2 to TauDEM
+
+::: columns
+:::: {.column width="20%"}
+![](images/power2.svg){width=80%}
+::::
+
+:::: {.column width="60%"}
+$$t = 1 + \left[ (8 - \log_2 p) \mod 8 \right]$$  
+::::
+
+:::: {.column width="20%"}
+![](images/taudem.svg){width=80%}
+::::
+:::
+```bash
+r.mapcalc "taudem = 1 + (8 - log(power2, 2)) % 8"
+```
+
+## 12. TauDEM to Power2
+
+::: columns
+:::: {.column width="20%"}
+![](images/taudem.svg){width=80%}
+::::
+
+:::: {.column width="60%"}
+$$p = 2^{(9 - t) \mod 8}$$  
+::::
+
+:::: {.column width="20%"}
+![](images/power2.svg){width=80%}
+::::
+:::
+```bash
+r.mapcalc "power2 = 2^((9 - taudem) % 8)"
+```
