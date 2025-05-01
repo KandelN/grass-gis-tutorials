@@ -39,10 +39,10 @@ However, when we use a multiple flow direction algorithm, there is no guarantee 
 
 Figure 1 shows ridge cells in yellow and sub-watershed polygons in the background.
 
-![ridges.png](images/ridges.png)  
+![ridges.webp](images/ridges.webp)  
 **Figure 1**: Identified ridges. The yellow cells represent ridges and the background polygons display sub-watersheds.
 
 Figure 2 clearly shows that these ridge cells do not have any contributing upstream cells.
 
-![ridges-closeup.png](images/ridges-closeup.png)  
+![ridges-closeup.webp](images/ridges-closeup.webp)  
 **Figure 2**: Close up. The red arrows show drain_dir directions.

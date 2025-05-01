@@ -29,7 +29,7 @@ I wanted to remove small offshore islands that are not entirely one country from
 
 In this article, I’ll just discuss spatial dissolving to keep it simple and focused. Figure 1 shows the original GADM 3.6 vector layer. I want to dissolve all the countries to create a new spatially dissolved layer.
 
-![Figure 1: GADM 3.6 layer](images/gadm36.png)
+![Figure 1: GADM 3.6 layer](images/gadm36.webp)
 
 The first step is to add a new integer column named `dissolve`.
 
@@ -52,7 +52,7 @@ v.db.dropcolumn map=gadm36 column=dissolve
 
 Is it this easy? Not yet because now all the areas in the dissolved layer have only one category and there are no ways to delete small islands because we cannot select them by category. Figure 2 shows the dissolved layer, but it only has one category for all the areas.
 
-![Figure 2: Spatially dissolved GADM 3.6 layer](images/gadm36_dissolved.png)
+![Figure 2: Spatially dissolved GADM 3.6 layer](images/gadm36_dissolved.webp)
 
 To address this problem, we just need to recreate categories for all the features. First, delete the single category from them.
 
@@ -68,4 +68,4 @@ v.category input=gadm36_dissolved_nocats output=gadm36_dissolved_cats option=add
 
 Figure 3 shows the final categorized layer.
 
-![Figure 3: Spatially dissolved and categorized GADM 3.6 layer](images/gadm36_dissolved_cats.png)
+![Figure 3: Spatially dissolved and categorized GADM 3.6 layer](images/gadm36_dissolved_cats.webp)

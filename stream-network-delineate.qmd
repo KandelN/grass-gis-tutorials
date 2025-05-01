@@ -33,7 +33,7 @@ r.stream.extract elevation=elevation threshold=50,000 stream_vector=streams accu
 
 Figure 1 shows a stream network vector map created using [r.stream.extract](https://grass.osgeo.org/grass-stable/manuals/r.stream.extract.html). The stream vector properly represents flow directions.
 
-![Figure 1: Stream networks generated using r.stream.extract. The red and blue lines represent the stream vector and flow directions, respectively. The underlying raster map is flow accumulation.](images/r.stream.extract.png)
+![Figure 1: Stream networks generated using r.stream.extract. The red and blue lines represent the stream vector and flow directions, respectively. The underlying raster map is flow accumulation.](images/r.stream.extract.webp)
 
 ---
 
@@ -75,4 +75,4 @@ r.to.vect input=streams_thinned output=streams type=line
 
 However, there are two problems with this method. First, the output stream vector map does not guarantee the correct directionality of stream paths. Second, if there are raster cell clumps in the stream raster map, stream loops may be generated or even incorrect stream paths can be obtained. An example is shown in Figure 2. Note that the stream vector does not fully agree with flow directions. Compare this output to Figure 1.
 
-![Figure 2: Stream networks generated using r.watershed, r.thin, and r.to.vect. The red and blue lines represent the stream vector and flow directions, respectively. The underlying raster map is flow accumulation.](images/r.watershed.png)
+![Figure 2: Stream networks generated using r.watershed, r.thin, and r.to.vect. The red and blue lines represent the stream vector and flow directions, respectively. The underlying raster map is flow accumulation.](images/r.watershed.webp)

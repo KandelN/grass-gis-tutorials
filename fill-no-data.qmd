@@ -23,7 +23,7 @@ execute:
   eval: false
 ---
 I need to fill onshore NULL (no data) cells in the DEM raster map shown below.
-![](images/dem1km-rast.png)
+![](images/dem1km-rast.webp)
 
 The first step is to fill no data cells by interpolation.
 
@@ -34,7 +34,7 @@ r.fillnulls input=dem1km output=dem1km_nullfilled method=bilinear
 
 However, [r.fillnulls](https://grass.osgeo.org/grass-stable/manuals/r.fillnulls.html) fills not only small islands of NULL cells, but also any NULL cells outside the valid raster boundaries. The output from [r.fillnulls](https://grass.osgeo.org/grass-stable/manuals/r.fillnulls.html) will be rectangular regardless of the original shape of the input raster map.
 
-![](images/dem1km_nullfilled-rast.png)
+![](images/dem1km_nullfilled-rast.webp)
 
 I need to create a mask that only covers the original data extent, but it should also include no data areas. First, create a mask using the original DEM raster map.
 
@@ -42,7 +42,7 @@ I need to create a mask that only covers the original data extent, but it should
 r.mapcalc expression='dem1km_mask=if(!isnull(dem1km),1,null())'
 ```
 
-![](images/dem1km_mask-rast.png)
+![](images/dem1km_mask-rast.webp)
 
 Convert this raster mask to vector.
 
@@ -50,7 +50,7 @@ Convert this raster mask to vector.
 r.to.vect input=dem1km_mask output=dem1km_mask type=area
 ```
 
-![](images/dem1km_mask-vect.png)
+![](images/dem1km_mask-vect.webp)
 
 There are island areas where no data cells are. These areas are not assigned a centroid, so let’s assign a centroid to them.
 
@@ -58,7 +58,7 @@ There are island areas where no data cells are. These areas are not assigned a c
 v.centroids input=dem1km_mask output=dem1km_mask_nullfilled
 ```
 
-![](images/dem1km_mask_nullfilled-vect.png)
+![](images/dem1km_mask_nullfilled-vect.webp)
 
 Create a new column “dissolve” and assign the same value of 1 to this column for all areas. Then, dissolve all areas by this column.
 
@@ -68,7 +68,7 @@ v.db.update map=dem1km_mask_nullfilled column=dissolve value=1
 v.dissolve input=dem1km_mask_nullfilled output=dem1km_mask_dissolved column=dissolve
 ```
 
-![](images/dem1km_mask_dissolved-vect.png)
+![](images/dem1km_mask_dissolved-vect.webp)
 
 Convert the dissolved vector to raster.
 
@@ -84,7 +84,7 @@ v.to.rast input=dem1km_mask_nullfilled output=dem1km_mask_dissolved use=value
 r.to.vect input=dem1km_mask_dissolved out=dem1km_mask_dissolved type=area
 ```
 
-![](images/dem1km_mask_dissolved-rast.png)
+![](images/dem1km_mask_dissolved-rast.webp)
 
 Extract the filled DEM by the final mask.
 
@@ -92,4 +92,4 @@ Extract the filled DEM by the final mask.
 r.mapcalc expression='dem1km_clean=if(!isnull(dem1km_mask_dissolved),dem1km_nullfilled,null())'
 ```
 
-![](images/dem1km_clean-rast.png)
+![](images/dem1km_clean-rast.webp)

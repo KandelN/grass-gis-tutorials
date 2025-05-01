@@ -28,7 +28,7 @@ execute:
 The [`r.accumulate`](https://grass.osgeo.org/grass-stable/manuals/addons/r.accumulate.html) module implements recursive and iterative algorithms for calculating the longest flow path based on Cho (2020). This module outperforms Arc Hydro’s Longest Flow Path tool.
 
 
-![](images/fig-ga-ssd-elapsed-vs-subarea-archydropro.png)
+![](images/fig-ga-ssd-elapsed-vs-subarea-archydropro.webp)
 
 
 # 2. Deprecated Raster Approach
@@ -106,11 +106,11 @@ v.select ainput=path binput=heads output=lfp
 ```
 Finally, we got the longest flow path in `lfp`.
 
-![](images/r_lfp_nc_example_single.png)
+![](images/r_lfp_nc_example_single.webp)
 
 This example produces two lines with the same flow length.
 
-![](images/r_lfp_nc_example_single_warning.png)
+![](images/r_lfp_nc_example_single_warning.webp)
 
 ## 2.3 [`r.lfp`](https://grass.osgeo.org/grass72/manuals/addons/r.lfp.html) Addon
 The procedure above has been implemented as a GRASS addon module [`r.lfp`](https://grass.osgeo.org/grass72/manuals/addons/r.lfp.html).
