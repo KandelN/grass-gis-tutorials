@@ -1,0 +1,34 @@
+---
+title: "How to create an empty vector map in GRASS GIS"
+author: "Huidae Cho"
+date: 2022-03-25
+date-modified: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-tools: true
+    code-copy: true
+    code-fold: false
+    html-math-method: katex
+    theme:
+      - cosmo
+categories: [beginner]
+linkcolor: green
+urlcolor: green
+citecolor: green
+highlight-style: github
+# engine: knitr
+execute:
+  eval: false
+---
+
+
+[`v.edit`](https://grass.osgeo.org/grass-stable/manuals/v.edit.html) can create an empty vector map, but it does not create an attribute table.
+
+```bash
+# Create an empty vector map
+v.edit map=new_map tool=create
+# Add a new table
+v.db.addtable map=new_map columns="value double"
+```
